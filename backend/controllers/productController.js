@@ -2,6 +2,7 @@ const Product = require('../models/productModel');
 const ErrorHandler = require('../utils/errorhandler');
 const catchAsyncError = require('../middlewares/catchAsyncErrors');
 const ApiFeatures = require('../utils/apiFeatures');
+const { StatusCodes } = require('http-status-codes');
 
 // Add a new Product to the DB
 const createProducts = catchAsyncError(async (req, res, ) => {
@@ -81,6 +82,95 @@ const getProductDetails = catchAsyncError(async (req, res, next)=>
     })
 });
 
+const createProductReview = catchAsyncError(async(req, res, next)=>{
+
+    const {rating, productId, comment} = req.body;
+
+    const review = {
+        user : req.user._id,
+        name : req.user.name,
+        rating : rating,
+        comment,
+    }
+
+    const product = await Product.findById(productId);
+
+    const isReviewed = product.review.find(rev => rev.user.toString() === req.user._id);
+
+    if(isReviewed)
+    {
+        product.reviews.forEach(rev=>{
+            if(rev.user.toString() === req.user._id.toString())
+                rev.rating = rating,
+                rev.comment = comment
+        })
+    }
+    else{
+        product.reviews.push(review);
+        product.numOfReviews = product.reviews.length;
+    }
+
+    let avg = 0;
+    product.rating = product.reviews.forEach(rev=>{
+        avg = avg + rev.rating
+    })
+    
+    product.rating = avg / product.reviews.length;
+
+    await product.save({validateBeforeSave: false});
+
+    res.status(StatusCodes.OK).json({
+        success: true,
+    })
+});
+
+const getProductReviews = catchAsyncError(async(req, res, next)=>{
+    const product = await Product.findById(req.query.id);
+
+    if(!product)
+    {
+        return next(new ErrorHandler(`Product does not exist`, StatusCodes.BAD_GATEWAY))
+    }
+
+    res.status(StatusCodes.OK).json({
+        success : true,
+        product,
+    })
+})
+
+
+const deleteProductReview = catchAsyncError(async(req, res, next)=>{
+    const product = await Product.findById(req.query.productId);
+
+    if(!product)
+    {
+        return next(new ErrorHandler(`Product does not exist in Database`, StatusCodes.BAD_REQUEST));
+    }
+
+    const reviews = product.reviews.filter(rev=>rev._id.toString() !== req.query.id.toString());
+
+    let avg = 0;
+    
+    product.reviews.forEach(rev=>{
+        avg += rev.rating;
+    })
+
+    product.ratings = avg / reviews.length;
+
+    const numOfReviews = reviews.length;
+
+    await product.findByIdAndUpdate(req.query.productId,{ reviews, ratings, numOfReviews},{
+        new : true,
+        runValidators : true,
+        useFindAndModify : false,
+    })
+
+
+    res.status(StatusCodes.OK).json({
+        success : true,
+    })
+})
+
 module.exports = {
-    getAllProducts, createProducts, updateProduct, deleteProduct, getProductDetails
+    getAllProducts, createProducts, updateProduct, deleteProduct, getProductDetails, createProductReview, getProductReviews, deleteProductReview
 }

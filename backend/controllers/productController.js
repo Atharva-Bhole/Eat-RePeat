@@ -5,6 +5,7 @@ const ApiFeatures = require('../utils/apiFeatures');
 
 // Add a new Product to the DB
 const createProducts = catchAsyncError(async (req, res, ) => {
+    req.body.user = user.id;
     const product = await Product.create(req.body);
 
     res.status(201).json({

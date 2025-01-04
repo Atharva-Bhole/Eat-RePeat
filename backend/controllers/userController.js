@@ -3,7 +3,7 @@ const catchAsyncErrors = require('../middlewares/catchAsyncErrors');
 const sendToken = require('../utils/jwtToken');
 const User = require('../models/userModel');
 const sendEmail = require('../utils/sendEmail.js');
-
+const crypto = require('crypto');
 
 const registerUser = async(req, res, next)=>{
     const {name, email, password} = req.body;
@@ -83,14 +83,14 @@ const forgotPassword = catchAsyncErrors(async(req, res, next)=>{
     await user.save({validateBeforeSave:false});
 
 
-    const resetPasswordUrl =  `${req.protocol}://${req.host}/api/v1/password/reset/${resetToken}`;
+    const resetPasswordUrl =  `${req.protocol}://${req.hostname}/api/v1/password/reset/${resetToken}`;
 
     const message = `Your password reset token is :- \n\n ${resetPasswordUrl} \n\n If you have not requested this email then please ignore it.`;
 
     try{
         await sendEmail({
             email : user.email,
-            message : `Eat-RePeat Password Recovery`,
+            subject : `Eat-RePeat Password Recovery`,
             message
         });
 
@@ -111,6 +111,35 @@ const forgotPassword = catchAsyncErrors(async(req, res, next)=>{
 
 })
 
+// Reset Password
+const resetPassword = catchAsyncErrors(async(req, res, next)=>{
+    const resetPasswordToken = crypto.createHash("sha256")
+    .update(req.params.token)
+    .digest("hex")
+
+    const user = await User.findOne({
+        resetPasswordToken,
+        resetPasswordExpire: {$gt: Date.now()},
+    });
+
+    if(!user)
+    {
+        return next(new ErrorHandler("Reset Password Token is invalid or has been expired", 404));
+    }
+
+    if(req.body.password !== req.body.confirmPassword)
+    {
+        return next(new ErrorHandler("Password does not match", 400));
+    }
+
+    user.password = req.body.password;
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpire = undefined;
+
+    await user.save();
+    sendToken(user, 200, res);
+});
+
 module.exports = {
-    registerUser, loginUser, LogOut, forgotPassword
+    registerUser, loginUser, LogOut, forgotPassword, resetPassword
 }
